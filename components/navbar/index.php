@@ -7,6 +7,8 @@ if (strpos($currentPath, 'auth') !== false) {
     $hideNavbar = true;
 }
 
+$username = $_SESSION['user']['username'] ?? 'Guest';
+
 ?>
 
 <div class="items-center justify-between bg-white md:px-[26px] md:py-[27px] p-4 fixed top-0 w-full z-40 <?= $hideNavbar ? 'hidden' : 'flex' ?>">
@@ -23,7 +25,7 @@ if (strpos($currentPath, 'auth') !== false) {
         <div class="flex items-center space-x-1">
             <img src="<?= assets('images/icons/user.svg') ?>" alt="user" class="w-6 h-6" id="dropdownTrigger">
             <p class="hidden font-semibold truncate max-w-48 md:block">
-                Halo, <?= $_SESSION['user']['username'] ?>
+                Halo, <?= $username ?>
             </p>
         </div>
         <div class="hidden w-px h-8 bg-gray-400 md:block"></div>
@@ -35,7 +37,7 @@ if (strpos($currentPath, 'auth') !== false) {
         <div class="absolute right-0 hidden p-4 transition bg-white rounded-lg shadow-2xl top-10" id="dropdownMenu">
             <div class="flex flex-col space-y-5">
                 <p class="font-semibold truncate max-w-48">
-                    Halo, Hamdan Nurachid
+                    Halo, <?= $username ?>
                 </p>
                 <a class="font-semibold text-red-500 cursor-pointer hover:text-red-700" href="<?= url('auth/signout') ?>">Keluar</a>
             </div>
