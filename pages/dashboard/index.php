@@ -4,6 +4,11 @@ require_once __DIR__ . '/../../assets/helpers/functions.php';
 
 checkLogin('auth/signin');
 
+if (isAdmin()) {
+    header('Location: ' . url('admin'));
+    exit;
+}
+
 $flashAlert = $_SESSION['flash_alert'] ?? null;
 unset($_SESSION['flash_alert']);
 

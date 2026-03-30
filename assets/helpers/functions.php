@@ -33,7 +33,10 @@ function signin($username, $password)
     $username = cleanInput($username);
     $password = hash('sha256', cleanInput($password));
 
-    $sql = "SELECT * FROM users WHERE username = '$username' AND password = '$password'";
+    $sql = "SELECT users.*, roles.name AS role_name
+            FROM users
+            LEFT JOIN roles ON roles.id = users.role_id
+            WHERE users.username = '$username' AND users.password = '$password'";
 
     return $conn->query($sql);
 }
@@ -58,6 +61,25 @@ function checkLogin($path)
     }
 }
 
+function isAdmin()
+{
+    if (!isset($_SESSION['user'])) {
+        return false;
+    }
+
+    return (($_SESSION['user']['role_name'] ?? '') === 'admin') || ((int) ($_SESSION['user']['role_id'] ?? 0) === 1);
+}
+
+function checkAdmin($fallbackPath = 'dashboard')
+{
+    checkLogin('auth/signin');
+
+    if (!isAdmin()) {
+        header('Location: ' . url($fallbackPath));
+        exit;
+    }
+}
+
 function getTasks()
 {
     global $conn;
@@ -76,6 +98,48 @@ function getTasks()
     }
 
     return $tasks;
+}
+
+function getAllTasksWithUsers()
+{
+    global $conn;
+
+    $sql = "SELECT tasks.*, users.username
+            FROM tasks
+            INNER JOIN users ON users.id = tasks.user_id
+            ORDER BY tasks.id DESC";
+
+    $result = $conn->query($sql);
+    $tasks = [];
+
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $tasks[] = $row;
+        }
+    }
+
+    return $tasks;
+}
+
+function getAllUsersWithRole()
+{
+    global $conn;
+
+    $sql = "SELECT users.id, users.username, roles.name AS role_name
+            FROM users
+            LEFT JOIN roles ON roles.id = users.role_id
+            ORDER BY users.id DESC";
+
+    $result = $conn->query($sql);
+    $users = [];
+
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $users[] = $row;
+        }
+    }
+
+    return $users;
 }
 
 function deleteFile($file)

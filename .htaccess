@@ -11,6 +11,7 @@ RewriteRule ^$ dashboard [R=302,L]
 
 # App routes
 RewriteRule ^dashboard/?$ pages/dashboard/index.php [L,QSA]
+RewriteRule ^admin/?$ pages/admin/index.php [L,QSA]
 RewriteRule ^auth/signin/?$ pages/auth/signin/index.php [L,QSA]
 RewriteRule ^auth/signup/?$ pages/auth/signup/index.php [L,QSA]
 RewriteRule ^auth/signout/?$ pages/auth/signout/index.php [L,QSA]
@@ -19,6 +20,7 @@ RewriteRule ^auth/signout/?$ pages/auth/signout/index.php [L,QSA]
 <IfModule !mod_rewrite.c>
 DirectoryIndex pages/dashboard/index.php
 RedirectMatch 307 ^/todo-list-php-native/dashboard/?$ /todo-list-php-native/pages/dashboard/index.php
+RedirectMatch 307 ^/todo-list-php-native/admin/?$ /todo-list-php-native/pages/admin/index.php
 RedirectMatch 307 ^/todo-list-php-native/auth/signin/?$ /todo-list-php-native/pages/auth/signin/index.php
 RedirectMatch 307 ^/todo-list-php-native/auth/signup/?$ /todo-list-php-native/pages/auth/signup/index.php
 RedirectMatch 307 ^/todo-list-php-native/auth/signout/?$ /todo-list-php-native/pages/auth/signout/index.php
