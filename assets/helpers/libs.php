@@ -10,7 +10,35 @@
 if (!function_exists('assets')) {
     function assets($path)
     {
-        return '/todo-list-php-native/assets/' . $path;
+        return appBasePath() . '/assets/' . ltrim($path, '/');
+    }
+}
+
+/**
+ * Resolve the app base path dynamically (e.g. /todolist).
+ *
+ * @return string
+ */
+if (!function_exists('appBasePath')) {
+    function appBasePath()
+    {
+        static $basePath = null;
+
+        if ($basePath !== null) {
+            return $basePath;
+        }
+
+        $projectRoot = realpath(__DIR__ . '/../../');
+        $documentRoot = isset($_SERVER['DOCUMENT_ROOT']) ? realpath($_SERVER['DOCUMENT_ROOT']) : false;
+
+        if ($projectRoot && $documentRoot && strpos($projectRoot, $documentRoot) === 0) {
+            $relativePath = trim(substr($projectRoot, strlen($documentRoot)), '/');
+            $basePath = $relativePath === '' ? '' : '/' . $relativePath;
+            return $basePath;
+        }
+
+        $basePath = '';
+        return $basePath;
     }
 }
 
@@ -34,8 +62,9 @@ if (!function_exists('components')) {
  * @return string The full URL to the path.
  */
 if (!function_exists('url')) {
-    function url($path)
+    function url($path = '')
     {
-        return '/todo-list-php-native/' . $path;
+        $path = ltrim($path, '/');
+        return appBasePath() . ($path === '' ? '' : '/' . $path);
     }
 }

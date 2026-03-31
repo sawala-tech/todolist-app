@@ -6,8 +6,8 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Redirect app root to dashboard
-RewriteRule ^$ dashboard [R=302,L]
+# Redirect app root to signin
+RewriteRule ^$ auth/signin [R=302,L]
 
 # App routes
 RewriteRule ^dashboard/?$ pages/dashboard/index.php [L,QSA]
@@ -18,10 +18,10 @@ RewriteRule ^auth/signout/?$ pages/auth/signout/index.php [L,QSA]
 </IfModule>
 
 <IfModule !mod_rewrite.c>
-DirectoryIndex pages/dashboard/index.php
-RedirectMatch 307 ^/todo-list-php-native/dashboard/?$ /todo-list-php-native/pages/dashboard/index.php
-RedirectMatch 307 ^/todo-list-php-native/admin/?$ /todo-list-php-native/pages/admin/index.php
-RedirectMatch 307 ^/todo-list-php-native/auth/signin/?$ /todo-list-php-native/pages/auth/signin/index.php
-RedirectMatch 307 ^/todo-list-php-native/auth/signup/?$ /todo-list-php-native/pages/auth/signup/index.php
-RedirectMatch 307 ^/todo-list-php-native/auth/signout/?$ /todo-list-php-native/pages/auth/signout/index.php
+DirectoryIndex pages/auth/signin/index.php
+RedirectMatch 307 ^/todolist/dashboard/?$ /todolist/pages/dashboard/index.php
+RedirectMatch 307 ^/todolist/admin/?$ /todolist/pages/admin/index.php
+RedirectMatch 307 ^/todolist/auth/signin/?$ /todolist/pages/auth/signin/index.php
+RedirectMatch 307 ^/todolist/auth/signup/?$ /todolist/pages/auth/signup/index.php
+RedirectMatch 307 ^/todolist/auth/signout/?$ /todolist/pages/auth/signout/index.php
 </IfModule>
