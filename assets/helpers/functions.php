@@ -49,8 +49,16 @@ function signup($username, $password)
     $password = hash('sha256', cleanInput($password));
 
     $sql = "INSERT INTO users (username, password) VALUES ('$username', '$password')";
-
-    return $conn->query($sql);
+    $result = false;
+    try {
+        $result = $conn->query($sql);
+    } catch (mysqli_sql_exception $e) {
+        if ($e->getCode() == 1062) { // Duplicate entry
+            return 'duplicate';
+        }
+        return false;
+    }
+    return $result;
 }
 
 function checkLogin($path)
