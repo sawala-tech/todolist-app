@@ -8,8 +8,18 @@ $success = false;
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $result = signup($_POST['username'], $_POST['password']);
 
-    if ($result) {
+    if ($result === true) {
         $success = true;
+    } elseif ($result === 'duplicate') {
+        echo "
+        <script>
+            Swal.fire({
+                icon: 'warning',
+                title: 'Username sudah terdaftar',
+                text: 'Silakan gunakan username lain.',
+            })
+        </script>
+        ";
     } else {
         echo "
         <script>
