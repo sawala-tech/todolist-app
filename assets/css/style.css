@@ -1,6 +1,6 @@
 body {
-    visibility: hidden;
-    opacity: 0;
-    transition: opacity 0.5s ease-in-out;
-    background-color: #F3F4F6;
+  visibility: visible;
+  opacity: 1;
+  transition: none;
+  background-color: #f3f4f6;
 }

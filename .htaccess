@@ -1,21 +1,27 @@
+<IfModule mod_rewrite.c>
 RewriteEngine On
 
-# Redirect root URL to /dashboard (for localhost)
-RewriteCond %{REQUEST_URI} ^/todo-list-php-native/$
-RewriteRule ^$ /todo-list-php-native/dashboard [R=302,L]
+# If file/folder exists, serve it directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# Redirect root URL to /dashboard (for live server)
-RewriteCond %{REQUEST_URI} ^/$
-RewriteRule ^$ /dashboard [R=302,L]
+# Redirect app root to signin
+RewriteRule ^$ auth/signin [R=302,L]
 
-# Prevent direct access to /pages/
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+# App routes
+RewriteRule ^dashboard/?$ pages/dashboard/index.php [L,QSA]
+RewriteRule ^admin/?$ pages/admin/index.php [L,QSA]
+RewriteRule ^auth/signin/?$ pages/auth/signin/index.php [L,QSA]
+RewriteRule ^auth/signup/?$ pages/auth/signup/index.php [L,QSA]
+RewriteRule ^auth/signout/?$ pages/auth/signout/index.php [L,QSA]
+</IfModule>
 
-RewriteRule ^dashboard$ pages/dashboard/index.php [L]
-RewriteRule ^auth/signin$ pages/auth/signin/index.php [L]
-RewriteRule ^auth/signup$ pages/auth/signup/index.php [L]
-RewriteRule ^auth/signout$ pages/auth/signout/index.php [L]
-
-# Optional: Catch all for auth routes
-RewriteRule ^(dashboard|auth/[^/]+)$ pages/$1/index
+<IfModule !mod_rewrite.c>
+DirectoryIndex pages/auth/signin/index.php
+RedirectMatch 307 ^/todolist/dashboard/?$ /todolist/pages/dashboard/index.php
+RedirectMatch 307 ^/todolist/admin/?$ /todolist/pages/admin/index.php
+RedirectMatch 307 ^/todolist/auth/signin/?$ /todolist/pages/auth/signin/index.php
+RedirectMatch 307 ^/todolist/auth/signup/?$ /todolist/pages/auth/signup/index.php
+RedirectMatch 307 ^/todolist/auth/signout/?$ /todolist/pages/auth/signout/index.php
+</IfModule>

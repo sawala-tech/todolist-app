@@ -11,7 +11,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($result->num_rows > 0) {
         $user = $result->fetch_assoc();
         $_SESSION['user'] = $user;
-        header('Location: ' . url('dashboard'));
+
+        if (($user['role_name'] ?? '') === 'admin' || ((int) ($user['role_id'] ?? 0) === 1)) {
+            header('Location: ' . url('admin'));
+        } else {
+            header('Location: ' . url('dashboard'));
+        }
+        exit;
     } else {
         echo "
         <script>

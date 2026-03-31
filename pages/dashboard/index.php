@@ -1,15 +1,37 @@
 <?php
 require_once __DIR__ . '/../../assets/helpers/libs.php';
 require_once __DIR__ . '/../../assets/helpers/functions.php';
-include components('templates/header');
 
 checkLogin('auth/signin');
 
-$tasks = getTasks();
+if (isAdmin()) {
+    header('Location: ' . url('admin'));
+    exit;
+}
+
+$flashAlert = $_SESSION['flash_alert'] ?? null;
+unset($_SESSION['flash_alert']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-    $id = $_GET['id'];
-    deleteTask($id);
+    header('Content-Type: application/json');
+    $id = $_GET['id'] ?? null;
+
+    if ($id && deleteTask($id)) {
+        $_SESSION['flash_alert'] = [
+            'title' => 'Berhasil menghapus tugas!',
+            'icon' => 'success',
+        ];
+        echo json_encode(['success' => true]);
+    } else {
+        $_SESSION['flash_alert'] = [
+            'title' => 'Gagal menghapus tugas!',
+            'icon' => 'error',
+        ];
+        http_response_code(400);
+        echo json_encode(['success' => false]);
+    }
+
+    exit;
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -23,28 +45,23 @@ if ($method === 'POST') {
     $title = $_POST['title'];
     $description = $_POST['description'];
     $deadline = $_POST['deadline'];
-    $attachment = $_FILES['attachment'];
+    $attachment = $_FILES['attachment'] ?? ['error' => UPLOAD_ERR_NO_FILE];
     $status = $_POST['status'];
 
     if (addTask($title, $description, $deadline, $attachment, $status)) {
+        $_SESSION['flash_alert'] = [
+            'title' => 'Berhasil menambahkan tugas!',
+            'icon' => 'success',
+        ];
         header('Location: ' . url('dashboard'));
-        echo "
-        <script>
-            Swal.fire({
-                title: 'Berhasil menambahkan tugas!',
-                icon: 'success',
-            })
-        </script>
-        ";
+        exit;
     } else {
-        echo "
-        <script>
-            Swal.fire({
-                title: 'Gagal menambahkan tugas!',
-                icon: 'error',
-            })
-        </script>
-        ";
+        $_SESSION['flash_alert'] = [
+            'title' => 'Gagal menambahkan tugas!',
+            'icon' => 'error',
+        ];
+        header('Location: ' . url('dashboard'));
+        exit;
     }
 }
 
@@ -53,29 +70,34 @@ if ($method === 'PUT') {
     $title = $_POST['title'];
     $description = $_POST['description'];
     $deadline = $_POST['deadline'];
-    $attachment = $_FILES['attachment'];
+    $attachment = $_FILES['attachment'] ?? ['error' => UPLOAD_ERR_NO_FILE];
+    $replaceAttachment = isset($_POST['replace_attachment']) && $_POST['replace_attachment'] === '1';
     $status = $_POST['status'];
 
-    if (updateTask($id, $title, $description, $deadline, $attachment, $status)) {
+    if (updateTask($id, $title, $description, $deadline, $attachment, $status, $replaceAttachment)) {
+        $_SESSION['flash_alert'] = [
+            'title' => 'Berhasil mengubah tugas!',
+            'icon' => 'success',
+        ];
         header('Location: ' . url('dashboard'));
-        echo "
-        <script>
-            Swal.fire({
-                title: 'Berhasil mengubah tugas!',
-                icon: 'success',
-            })
-        </script>
-        ";
+        exit;
     } else {
-        echo "
-        <script>
-            Swal.fire({
-                title: 'Gagal mengubah tugas!',
-                icon: 'error',
-            })
-        </script>
-        ";
+        $_SESSION['flash_alert'] = [
+            'title' => 'Gagal mengubah tugas!',
+            'icon' => 'error',
+        ];
+        header('Location: ' . url('dashboard'));
+        exit;
     }
+}
+
+$tasks = getTasks();
+include components('templates/header');
+
+if ($flashAlert && isset($flashAlert['title'], $flashAlert['icon'])) {
+    $alertTitle = json_encode((string) $flashAlert['title']);
+    $alertIcon = json_encode((string) $flashAlert['icon']);
+    echo "<script>Swal.fire({title: $alertTitle, icon: $alertIcon});</script>";
 }
 
 // Task Statuses & Initial Count
@@ -95,9 +117,9 @@ foreach ($tasks as $task) {
 
 <main class="mt-[6.4rem]">
     <!-- Filter -->
-    <div class="grid grid-cols-3 max-sm:gap-x-4">
+<div class="max-sm:flex max-sm:w-full max-sm:justify-center max-sm:overflow-x-auto max-sm:gap-3 max-sm:pb-1 max-sm:[-ms-overflow-style:none] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:gap-0">
         <?php foreach ($statuses as $key => $status): ?>
-            <div class="flex items-center space-x-2 text-white md:px-6 md:py-4 max-sm:rounded-full pr-[12.5px] p-2 max-sm:w-fit max-sm:mx-auto <?= $status['color'] ?>" id="filterTodoTrigger" data-type="<?= $key ?>">
+            <div class="flex items-center space-x-2 text-white md:px-6 md:py-4 max-sm:rounded-full pr-[12.5px] p-2 max-sm:w-max max-sm:shrink-0 <?= $status['color'] ?>" id="filterTodoTrigger" data-type="<?= $key ?>">
                 <img src="<?= assets('images/icons/' . $status['icon']) ?>" alt="icon" class="w-5 h-5 md:w-6 md:h-6" />
                 <h3 class="text-sm font-semibold md:text-lg"><?= $status['title'] ?> <span class="max-sm:hidden">(<?= $taskCount[$key] ?>)</span></h3>
             </div>
@@ -119,19 +141,32 @@ foreach ($tasks as $task) {
                     <!-- Task Cards -->
                     <?php foreach ($tasks as $task): ?>
                         <?php if ($task['status'] === $key): ?>
-                            <div class="flex flex-col w-full p-4 space-y-5 bg-white rounded-lg shadow-md">
+                            <?php
+                            $safeTitle = trim((string) ($task['title'] ?? ''));
+                            $safeDescription = trim((string) ($task['description'] ?? ''));
+                            $safeAttachment = trim((string) ($task['attachment'] ?? ''));
+                            $safeDeadline = trim((string) ($task['deadline'] ?? ''));
+                            $formattedDeadline = $safeDeadline !== '' && strtotime($safeDeadline) !== false
+                                ? date("d M Y", strtotime($safeDeadline))
+                                : '-';
+                            ?>
+                            <div class="flex flex-col w-full p-4 space-y-2 bg-white rounded-lg shadow-md">
                                 <div class="flex flex-col space-y-2">
-                                    <h4 class="font-semibold"><?= htmlspecialchars($task['title']) ?></h4>
-                                    <p class="text-gray-600 line-clamp-2"><?= htmlspecialchars($task['description']) ?></p>
+                                    <h4 class="font-semibold"><?= $safeTitle !== '' ? htmlspecialchars($safeTitle) : '-' ?></h4>
+                                    <p class="text-gray-600 line-clamp-2"><?= $safeDescription !== '' ? htmlspecialchars($safeDescription) : '-' ?></p>
                                     <div class="flex items-center space-x-2">
                                         <img src="<?= assets('images/icons/files.svg') ?>" alt="files" class="w-5 h-5" />
-                                        <a href="<?= htmlspecialchars(assets("public/" . $task['attachment'])) ?>" target="_blank" class="text-blue-500 truncate hover:underline max-w-96">
-                                            <?= basename($task['attachment']) ?>
-                                        </a>
+                                        <?php if ($safeAttachment !== ''): ?>
+                                            <a href="<?= htmlspecialchars(assets("public/" . $safeAttachment)) ?>" target="_blank" class="text-blue-500 truncate hover:underline max-w-96">
+                                                <?= htmlspecialchars(basename($safeAttachment)) ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <p class="text-gray-600">-</p>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="flex items-center space-x-2">
                                         <img src="<?= assets('images/icons/clock.svg') ?>" alt="clock" class="w-5 h-5" />
-                                        <p>Tenggat Waktu: <?= date("d M Y", strtotime($task['deadline'])) ?></p>
+                                        <p>Tenggat Waktu: <?= $formattedDeadline ?></p>
                                     </div>
                                 </div>
                                 <div class="flex space-x-2">
@@ -219,6 +254,7 @@ foreach ($tasks as $task) {
             <form class="flex flex-col space-y-4" action="<?= url('dashboard') ?>" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="_method" value="PUT" />
                 <input type="hidden" name="id" id="editTodoId" />
+                <input type="hidden" name="replace_attachment" id="editReplaceAttachment" value="0" />
                 <div class="flex gap-2 md:items-center max-sm:flex-col">
                     <label class="text-sm font-semibold md:w-1/4">Nama Tugas</label>
                     <input type="text" class="md:w-3/4 h-10 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Judul Tugas" name="title" />
@@ -241,6 +277,13 @@ foreach ($tasks as $task) {
                 <div class="flex gap-2 md:items-center max-sm:flex-col">
                     <label class="text-sm font-semibold md:w-1/4">Lampiran/File</label>
                     <input type="file" class="border border-gray-300 rounded-md md:w-3/4 focus:outline-none focus:ring-2 focus:ring-emerald-500" name="attachment" />
+                </div>
+                <div class="flex gap-2 max-sm:flex-col">
+                    <div class="md:w-1/4"></div>
+                    <p class="text-sm text-gray-500 md:w-3/4">
+                        File saat ini:
+                        <a id="editCurrentAttachment" href="#" target="_blank" class="text-blue-500 hover:underline">-</a>
+                    </p>
                 </div>
                 <div class="flex gap-2 md:items-center max-sm:flex-col">
                     <label class="md:w-1/4">Status</label>
