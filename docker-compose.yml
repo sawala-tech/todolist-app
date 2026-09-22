@@ -1,0 +1,25 @@
+services:
+  todolist:
+    build: .
+    container_name: todolist_app
+    ports:
+      - "8888:80"         # akses via http://localhost:8888/
+    volumes:
+      - .:/var/www/html   # mount project langsung — perubahan file langsung terlihat
+    environment:
+      # Tidak dipakai langsung oleh PHP (config ada di functions.php),
+      # tapi berguna sebagai referensi
+      DB_HOST: strapi_mysql
+      DB_NAME: todo_list
+      DB_USER: root
+      DB_PASS: rootpassword
+    networks:
+      - mysql_network     # join network MySQL yang sudah ada
+    restart: unless-stopped
+
+# Join network existing tempat strapi_mysql berada
+# Jalankan: docker network ls  untuk konfirmasi nama network
+networks:
+  mysql_network:
+    external: true
+    name: smart_canteen_backend_default

@@ -1,97 +1,219 @@
-# TaskHub Todo List (PHP)
+# TaskHub — Project Collaboration Edition (v2)
 
-TaskHub is a PHP + MySQL todo application with authentication, role-based access, task management, file attachments, and an admin dashboard.
+TaskHub adalah aplikasi PHP + MySQL untuk manajemen task personal dan project kolaborasi dengan sistem invitation, review workflow, dan dashboard berbasis role.
 
-## Repository Context
+---
 
-Repository context has been saved in `REPOSITORY_CONTEXT.md`.
+## Fitur
 
-## Features
+### Autentikasi & Akun
+- Login dengan **username atau email**
+- Password lama berbasis SHA-256 otomatis di-rehash ke bcrypt saat login pertama
+- Status akun: `active`, `pending`, `suspended`
+- Signup publik dinonaktifkan — akun baru hanya melalui invitation admin
 
-- User signup and signin
-- Session-based authentication
-- Role-aware navigation (`admin` and `user`)
-- Task CRUD on dashboard (add, edit, delete)
-- Task status workflow: `open`, `in_progress`, `done`
-- Optional task attachment upload
-- Admin dashboard for task/user overview and summary
+### User Invitation
+- Admin membuat akun pending + password sementara
+- Token kriptografis (SHA-256 hash disimpan, raw token hanya di URL dan email)
+- Default expiry: **24 jam**
+- Admin dapat resend (token lama otomatis direvoke) dan revoke
+- Pada environment tanpa SMTP: link activation ditampilkan di halaman admin (dev fallback)
+- Aktivasi 2 langkah: verifikasi email + password sementara → set password baru
+
+### Role
+- Invitation dapat memilih role `user` atau `admin`
+- Admin dapat mengubah role user yang sudah aktif dari halaman manajemen user
+
+### Project Collaboration
+- Admin membuat project (draft / active / archived) dan mengelola anggota
+- User hanya melihat project yang menjadi anggotanya
+- Task project bisa di-assign ke satu member aktif
+- Priority: `low`, `medium`, `high`; label/kategori bebas
+
+### Task Review Workflow
+```
+open → in_progress → review → done
+                        ↓
+                     revision → in_progress
+```
+- User tidak dapat langsung menandai task `done`
+- Admin menyetujui (`review → done`) atau mengembalikan (`review → revision`) dengan feedback
+- Feedback hanya satu field per task (bukan thread komentar)
+
+### Dashboard
+- **Admin**: ringkasan user per status, project aktif, review queue, progress bar per project
+- **User**: daftar project yang diikuti, task yang ditugaskan, deadline 7 hari ke depan
+- Task personal (tanpa project) tetap tampil di dashboard user
+
+---
 
 ## Tech Stack
 
-- PHP (mysqli)
+- PHP (mysqli, prepared statements)
 - MySQL / MariaDB
-- Apache with `.htaccess` rewrite rules
-- Tailwind utility classes (loaded via CDN at runtime)
-- Vanilla JavaScript + jQuery
-- SweetAlert2 and Flowbite (CDN)
+- Apache dengan `.htaccess` rewrite
+- Tailwind CSS (CDN)
+- jQuery, SweetAlert2, Flowbite (CDN)
 
-## Project Structure
+---
+
+## Struktur Direktori
 
 ```text
 assets/
-	css/style.css
-	db/todo_list.sql
-	helpers/
-		functions.php   # DB + app logic
-		libs.php        # URL/path helpers
-	js/script.js
-	public/           # Uploaded attachments
+  db/
+    todo_list.sql        # Schema awal (v1)
+    migration_v2.sql     # Migration v2 (jalankan setelah todo_list.sql)
+  helpers/
+    functions.php        # DB connection, task CRUD lama, auth dasar
+    libs.php             # URL/path helpers
+    auth_helpers.php     # CSRF, password bcrypt+SHA256, access guards
+    invitation_helpers.php  # Invitation backend
+    project_helpers.php  # Project & membership CRUD
+    task_helpers.php     # State machine, review workflow, project tasks
+  public/                # Uploaded attachments
 components/
-	navbar/
-	templates/
+  navbar/index.php
+  partials/project_form_fields.php
+  templates/
 pages/
-	auth/signin/
-	auth/signup/
-	auth/signout/
-	dashboard/
-	admin/
-.htaccess           # Route mapping
+  admin/
+    index.php            # Admin dashboard
+    users/index.php      # Manajemen user & invitation
+    projects/
+      index.php          # Project list + member panel
+      tasks/create.php   # Buat tugas (admin)
+  auth/
+    signin/index.php     # Login (username atau email)
+    signup/index.php     # Disabled — redirect ke signin
+    signout/index.php
+    invite/index.php     # Aktivasi invitation
+  dashboard/index.php    # User dashboard
+  backlog/
+    index.php             # Backlog tugas pribadi
+    task/create.php       # Buat tugas pribadi
+    task/detail.php       # Detail/edit tugas pribadi
+  projects/
+    create/index.php      # Buat project
+    detail.php            # Project view (user)
+    tasks/create/index.php # Buat tugas dalam project
+    tasks/detail.php      # Detail tugas + review actions
+.htaccess                # Route mapping
+.env.php                 # (Tidak di-commit) Konfigurasi mail
 ```
+
+---
+
+## Setup
+
+### 1. Jalankan database
+
+```bash
+# Buat database
+mysql -u root -p -e "CREATE DATABASE todo_list;"
+
+# Import schema awal
+mysql -u root -p todo_list < assets/db/todo_list.sql
+
+# Import migration v2
+mysql -u root -p todo_list < assets/db/migration_v2.sql
+```
+
+### 2. Konfigurasi koneksi DB
+
+Edit `assets/helpers/functions.php`:
+```php
+$host     = "localhost";
+$username = "root";
+$password = "root";
+$dbname   = "todo_list";
+```
+
+### 3. Web server (MAMP)
+
+1. Letakkan project di `htdocs/todolist`
+2. Nyalakan Apache dan MySQL
+3. Buka: `http://localhost:8888/todolist`
+
+---
+
+## Konfigurasi Mail (Opsional)
+
+Buat file `.env.php` di root project (jangan commit ke repository):
+
+```php
+<?php
+define('MAIL_FROM',     'noreply@contoh.com');
+define('MAIL_HOST',     'smtp.contoh.com');
+define('MAIL_PORT',     587);
+define('MAIL_USERNAME', 'user@contoh.com');
+define('MAIL_PASSWORD', 'rahasia');
+```
+
+Jika tidak dikonfigurasi, link invitation ditampilkan sebagai copyable link di halaman admin setelah membuat user baru (**development mode**).
+
+---
+
+## Akun Default
+
+| Role  | Username | Password |
+|-------|----------|----------|
+| Admin | `admin`  | `admin`  |
+
+> Password lama (SHA-256) otomatis di-upgrade ke bcrypt saat pertama login.
+
+---
 
 ## Routes
 
-Defined in `.htaccess`:
+| Method | Path | Halaman |
+|--------|------|---------|
+| GET/POST | `/auth/signin` | Login (username atau email) |
+| GET | `/auth/signup` | Redirect ke signin (disabled) |
+| GET/POST | `/auth/invite?token=...` | Aktivasi invitation |
+| GET | `/auth/signout` | Logout |
+| GET | `/dashboard` | Dashboard user |
+| GET | `/admin` | Dashboard admin |
+| GET/POST | `/admin/users` | Manajemen user & invitation |
+| GET/POST | `/admin/projects` | Manajemen project & member |
+| GET/POST | `/admin/projects/tasks/create?project_id=X` | Buat tugas (admin) |
+| GET | `/projects/create` | Buat project |
+| GET | `/projects/{id}` | Detail project (user) |
+| GET/POST | `/projects/{id}/tasks/create` | Buat tugas dalam project |
+| GET/POST | `/projects/{id}/tasks/{taskId}` | Detail & review tugas |
+| GET/POST | `/backlog/task/create` | Buat tugas pribadi |
+| GET/POST | `/backlog/task/{id}` | Detail tugas pribadi |
 
-- `/` -> `/auth/signin`
-- `/dashboard` -> `pages/dashboard/index.php`
-- `/admin` -> `pages/admin/index.php`
-- `/auth/signin` -> `pages/auth/signin/index.php`
-- `/auth/signup` -> `pages/auth/signup/index.php`
-- `/auth/signout` -> `pages/auth/signout/index.php`
+---
 
-## Database Setup
+## Backward Compatibility
 
-1. Create a database named `todo_list`.
-2. Import SQL from `assets/db/todo_list.sql`.
+- User admin existing tetap dapat login dengan password SHA-256 lama
+- Task personal existing (tanpa project) tetap tampil di dashboard user
+- Migration v2 aman dijalankan pada database existing (menggunakan `IF NOT EXISTS` dan `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`)
+- Existing user otomatis diberi status `active`
 
-The SQL includes:
+---
 
-- `roles` table (`admin`, `user`)
-- `users` table
-- `tasks` table
-- A seeded admin user
+## Catatan Keamanan
 
-## Local Setup (MAMP)
+- Semua form mutasi dilindungi CSRF token
+- Semua query baru menggunakan prepared statement
+- Token invitation disimpan hanya sebagai SHA-256 hash — raw token tidak pernah dicatat di log
+- Upload file divalidasi berdasarkan ukuran, MIME type, extension, dan nama file
+- Password baru menggunakan `password_hash()` (bcrypt)
 
-1. Place this project in your web root (example: `htdocs/todolist`).
-2. Start Apache and MySQL from MAMP.
-3. Import `assets/db/todo_list.sql` into MySQL.
-4. Confirm DB credentials in `assets/helpers/functions.php`:
-	 - host: `localhost`
-	 - username: `root`
-	 - password: `root`
-	 - database: `todo_list`
-5. Open the app in browser:
-	 - `http://localhost:8888/todolist` (default MAMP port)
+---
 
-## Default Admin Account
+## Fitur yang Tidak Diimplementasi (by design)
 
-- Username: `admin`
-- Password: `admin`
+Sesuai spec, berikut **tidak tersedia**:
 
-Note: Passwords are hashed in app logic using SHA-256.
-
-## Notes
-
-- `assets/public/` is used for uploaded files.
-- `middleware.php` exists, but page-level guards are currently enforced using helper functions (`checkLogin`, `checkAdmin`).
+- Komentar (real-time maupun AJAX)
+- Subtasks / checklist bertingkat
+- Tampilan kalender
+- Task dependency
+- Notifikasi push/email
+- Export PDF/CSV
+- Recurring tasks
+- Riwayat aktivitas / audit history

@@ -68,3 +68,62 @@ if (!function_exists('url')) {
         return appBasePath() . ($path === '' ? '' : '/' . $path);
     }
 }
+
+/**
+ * Generate full URL with domain for sharing (e.g., invitations).
+ */
+if (!function_exists('fullUrl')) {
+    function fullUrl($path = '')
+    {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $path = ltrim($path, '/');
+        return $protocol . $host . appBasePath() . ($path === '' ? '' : '/' . $path);
+    }
+}
+
+/**
+ * Generate URL-friendly slug from text.
+ */
+if (!function_exists('slugify')) {
+    function slugify($text)
+    {
+        // Replace non-alphanumeric characters with dashes
+        $slug = preg_replace('/[^a-zA-Z0-9]+/', '-', trim($text));
+        // Remove leading/trailing dashes and convert to lowercase
+        $slug = trim(strtolower($slug), '-');
+        // Remove multiple consecutive dashes
+        $slug = preg_replace('/-+/', '-', $slug);
+        
+        return $slug;
+    }
+}
+
+/**
+ * Get project by slug (for pretty URLs).
+ */
+if (!function_exists('getProjectBySlug')) {
+    function getProjectBySlug($slug)
+    {
+        global $conn;
+        
+        // First try to find by exact slug match if we stored slugs
+        // For now, we'll search by name pattern matching
+        $searchName = str_replace('-', ' ', $slug);
+        
+        $stmt = $conn->prepare(
+            "SELECT p.*, u.username AS owner_name
+             FROM projects p
+             LEFT JOIN users u ON u.id = p.owner_id
+             WHERE LOWER(REPLACE(p.name, ' ', '-')) = ? OR LOWER(p.name) LIKE ?
+             LIMIT 1"
+        );
+        $likePattern = '%' . $searchName . '%';
+        $stmt->bind_param('ss', $slug, $likePattern);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        
+        return $row ?: null;
+    }
+}
