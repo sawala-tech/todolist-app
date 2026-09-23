@@ -13,10 +13,10 @@ require_once $helpersDir . 'task_helpers.php';
 require_once $helpersDir . 'libs.php';
 
 //DB Connection
-$host     = "strapi_mysql";  // Docker container name (via shared network)
+$host     = "localhost";
 $username = "root";
-$password = "rootpassword";
-$dbname   = "todo_list";
+$password = "root";
+$dbname   = "taskhub";
 
 $conn = new mysqli($host, $username, $password, $dbname);
 
