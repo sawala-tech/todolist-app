@@ -1,6 +1,6 @@
 <IfModule mod_rewrite.c>
 RewriteEngine On
-RewriteBase /
+RewriteBase /todolist-app/
 
 # Serve existing FILES directly
 RewriteCond %{REQUEST_FILENAME} -f

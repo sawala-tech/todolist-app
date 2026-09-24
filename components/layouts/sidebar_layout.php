@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../../assets/helpers/libs.php';
+
 function renderSidebarLayout($currentPage = 'dashboard', $contentHtml = '', $pageTitle = 'TaskHub') {
     $userId = $_SESSION['user']['id'] ?? 0;
     $username = $_SESSION['user']['username'] ?? 'User';
@@ -44,24 +46,24 @@ function renderSidebarLayout($currentPage = 'dashboard', $contentHtml = '', $pag
         <div class="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col">
             <!-- Logo -->
             <div class="flex items-center p-6 border-b border-gray-200">
-                <div class="flex items-center">
-                    <img src="/assets/images/logo.png" alt="TaskHub" class="h-7 w-auto">
-                </div>
+                <a href="<?= url('dashboard') ?>" class="flex items-center">
+                    <img src="<?= assets('images/logo.png') ?>" alt="TaskHub" class="h-7 w-auto">
+                </a>
             </div>
 
             <!-- Navigation -->
             <nav class="flex-1 px-4 py-6 space-y-1">
-                <a href="/dashboard" class="nav-item <?= $currentPage === 'dashboard' ? 'nav-item-active' : '' ?> flex items-center px-3 py-2 rounded text-sm font-medium">
+                <a href="<?= url('dashboard') ?>" class="nav-item <?= $currentPage === 'dashboard' ? 'nav-item-active' : '' ?> flex items-center px-3 py-2 rounded text-sm font-medium">
                     <i class="fas fa-home w-5 text-center mr-3"></i>
                     Dashboard
                 </a>
                 
-                <a href="/backlog" class="nav-item <?= $currentPage === 'backlog' ? 'nav-item-active' : '' ?> flex items-center px-3 py-2 rounded text-sm font-medium">
+                <a href="<?= url('backlog') ?>" class="nav-item <?= $currentPage === 'backlog' ? 'nav-item-active' : '' ?> flex items-center px-3 py-2 rounded text-sm font-medium">
                     <i class="fas fa-list w-5 text-center mr-3"></i>
                     Backlog
                 </a>
                 
-                <a href="/activity" class="nav-item <?= $currentPage === 'activity' ? 'nav-item-active' : '' ?> flex items-center px-3 py-2 rounded text-sm font-medium">
+                <a href="<?= url('activity') ?>" class="nav-item <?= $currentPage === 'activity' ? 'nav-item-active' : '' ?> flex items-center px-3 py-2 rounded text-sm font-medium">
                     <i class="fas fa-clock w-5 text-center mr-3"></i>
                     Aktivitas
                 </a>
@@ -83,11 +85,11 @@ function renderSidebarLayout($currentPage = 'dashboard', $contentHtml = '', $pag
                         </button>
                         <!-- Popover -->
                         <div id="userPopover" class="hidden absolute bottom-8 right-0 z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[110px]">
-                            <a href="/profile" class="flex items-center w-full px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">
+                            <a href="<?= url('profile') ?>" class="flex items-center w-full px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">
                                 <i class="fas fa-user w-4 mr-2"></i>
                                 Profile
                             </a>
-                            <a href="/auth/signout" class="flex items-center w-full px-3 py-2 text-xs text-red-600 hover:bg-red-50">
+                            <a href="<?= url('auth/signout') ?>" class="flex items-center w-full px-3 py-2 text-xs text-red-600 hover:bg-red-50">
                                 <i class="fas fa-sign-out-alt w-4 mr-2"></i>
                                 Logout
                             </a>

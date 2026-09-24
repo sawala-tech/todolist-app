@@ -106,7 +106,7 @@ ob_start();
             </form>
         </div>
 
-        <a href="/projects/create" class="ml-4 bg-brand-blue text-white px-4 py-2 text-sm rounded-md hover:opacity-90 transition-opacity flex items-center">
+        <a href="<?= url('projects/create') ?>" class="ml-4 bg-brand-blue text-white px-4 py-2 text-sm rounded-md hover:opacity-90 transition-opacity flex items-center">
             <i class="fas fa-plus mr-2 text-xs"></i>
             Buat Project
         </a>
@@ -125,7 +125,7 @@ ob_start();
                 <?= $searchQuery ? 'Coba kata kunci yang berbeda' : 'Buat project pertama Anda untuk mulai berkolaborasi' ?>
             </p>
             <?php if (!$searchQuery): ?>
-                <a href="/projects/create" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors">
+                <a href="<?= url('projects/create') ?>" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors">
                     <i class="fas fa-plus mr-2 text-xs"></i>
                     Buat Project
                 </a>
@@ -224,7 +224,7 @@ ob_start();
 
                     <!-- Card Footer - CTA -->
                     <div class="px-3 py-2 bg-gray-50 border-t border-gray-100">
-                        <a href="/projects/<?= $project['id'] ?>"
+                        <a href="<?= url('projects/'.$project['id']) ?>"
                             class="flex items-center justify-center w-full py-1.5 px-3 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors">
                             <i class="fas fa-arrow-right mr-1 text-xs"></i>
                             Buka Project

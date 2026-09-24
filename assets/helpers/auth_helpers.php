@@ -161,7 +161,7 @@ function saveFileSecure(
         'text/plain','application/zip','application/x-zip-compressed',
     ],
     int $maxBytes = 5 * 1024 * 1024
-): string|null|false {
+) {
     if (!isset($file['error'])) return null;
     if ($file['error'] === UPLOAD_ERR_NO_FILE) return null;
     if ($file['error'] !== UPLOAD_ERR_OK) return false;

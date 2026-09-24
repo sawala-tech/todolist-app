@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['quick_add'])) {
         $stmt->close();
     }
     
-    header('Location: /backlog');
+    header('Location: '. url('backlog'));
     exit;
 }
 

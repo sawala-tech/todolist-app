@@ -20,7 +20,7 @@ function createProject(
     int     $ownerId,
     ?string $startDate = null,
     ?string $deadline = null
-): int|false {
+) {
     global $conn;
 
     $name        = trim($name);
