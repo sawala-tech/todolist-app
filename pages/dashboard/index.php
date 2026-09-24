@@ -1,330 +1,380 @@
 <?php
 require_once __DIR__ . '/../../assets/helpers/libs.php';
 require_once __DIR__ . '/../../assets/helpers/functions.php';
+require_once __DIR__ . '/../../assets/helpers/auth_helpers.php';
+require_once __DIR__ . '/../../assets/helpers/project_helpers.php';
+require_once __DIR__ . '/../../assets/helpers/ui_helpers.php';
+require_once __DIR__ . '/../../assets/helpers/task_helpers.php';
+require_once __DIR__ . '/../../components/layouts/sidebar_layout.php';
 
-checkLogin('auth/signin');
+requireActiveUser();
 
-if (isAdmin()) {
-    header('Location: ' . url('admin'));
-    exit;
-}
+$userId = (int)$_SESSION['user']['id'];
+$username = $_SESSION['user']['username'] ?? 'User';
 
-$flashAlert = $_SESSION['flash_alert'] ?? null;
-unset($_SESSION['flash_alert']);
-
-if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-    header('Content-Type: application/json');
-    $id = $_GET['id'] ?? null;
-
-    if ($id && deleteTask($id)) {
-        $_SESSION['flash_alert'] = [
-            'title' => 'Berhasil menghapus tugas!',
-            'icon' => 'success',
-        ];
-        echo json_encode(['success' => true]);
-    } else {
-        $_SESSION['flash_alert'] = [
-            'title' => 'Gagal menghapus tugas!',
-            'icon' => 'error',
-        ];
-        http_response_code(400);
-        echo json_encode(['success' => false]);
-    }
-
-    exit;
-}
-
-$method = $_SERVER['REQUEST_METHOD'];
-
-if ($method === "POST" && isset($_POST['_method']) && $_POST['_method'] === "PUT") {
-    $method = "PUT";
-}
-
-
-if ($method === 'POST') {
-    $title = $_POST['title'];
-    $description = $_POST['description'];
-    $deadline = $_POST['deadline'];
-    $attachment = $_FILES['attachment'] ?? ['error' => UPLOAD_ERR_NO_FILE];
-    $status = $_POST['status'];
-
-    if (addTask($title, $description, $deadline, $attachment, $status)) {
-        $_SESSION['flash_alert'] = [
-            'title' => 'Berhasil menambahkan tugas!',
-            'icon' => 'success',
-        ];
-        header('Location: ' . url('dashboard'));
-        exit;
-    } else {
-        $_SESSION['flash_alert'] = [
-            'title' => 'Gagal menambahkan tugas!',
-            'icon' => 'error',
-        ];
-        header('Location: ' . url('dashboard'));
+// Handle project actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    verifyCsrf();
+    
+    if ($_POST['action'] === 'change_status') {
+        $projectId = (int)$_POST['project_id'];
+        $newStatus = $_POST['status'];
+        
+        // Validate status
+        if (!in_array($newStatus, ['draft', 'active', 'archived'], true)) {
+            echo json_encode(['success' => false, 'message' => 'Status tidak valid']);
+            exit;
+        }
+        
+        // Check if user is project owner
+        if (!isProjectOwner($projectId, $userId)) {
+            echo json_encode(['success' => false, 'message' => 'Anda tidak memiliki akses untuk mengubah project ini']);
+            exit;
+        }
+        
+        // Update project status
+        global $conn;
+        $stmt = $conn->prepare('UPDATE projects SET status = ? WHERE id = ?');
+        $stmt->bind_param('si', $newStatus, $projectId);
+        $success = $stmt->execute();
+        $stmt->close();
+        
+        echo json_encode([
+            'success' => $success,
+            'message' => $success ? "Status project berhasil diubah menjadi {$newStatus}" : 'Gagal mengubah status project'
+        ]);
         exit;
     }
-}
-
-if ($method === 'PUT') {
-    $id = $_POST['id'];
-    $title = $_POST['title'];
-    $description = $_POST['description'];
-    $deadline = $_POST['deadline'];
-    $attachment = $_FILES['attachment'] ?? ['error' => UPLOAD_ERR_NO_FILE];
-    $replaceAttachment = isset($_POST['replace_attachment']) && $_POST['replace_attachment'] === '1';
-    $status = $_POST['status'];
-
-    if (updateTask($id, $title, $description, $deadline, $attachment, $status, $replaceAttachment)) {
-        $_SESSION['flash_alert'] = [
-            'title' => 'Berhasil mengubah tugas!',
-            'icon' => 'success',
-        ];
-        header('Location: ' . url('dashboard'));
-        exit;
-    } else {
-        $_SESSION['flash_alert'] = [
-            'title' => 'Gagal mengubah tugas!',
-            'icon' => 'error',
-        ];
-        header('Location: ' . url('dashboard'));
+    
+    if ($_POST['action'] === 'delete_project') {
+        $projectId = (int)$_POST['project_id'];
+        
+        // Check if user is project owner
+        if (!isProjectOwner($projectId, $userId)) {
+            echo json_encode(['success' => false, 'message' => 'Anda tidak memiliki akses untuk menghapus project ini']);
+            exit;
+        }
+        
+        // Delete project (cascade delete will handle tasks and members)
+        global $conn;
+        $stmt = $conn->prepare('DELETE FROM projects WHERE id = ?');
+        $stmt->bind_param('i', $projectId);
+        $success = $stmt->execute();
+        $stmt->close();
+        
+        echo json_encode([
+            'success' => $success,
+            'message' => $success ? 'Project berhasil dihapus' : 'Gagal menghapus project'
+        ]);
         exit;
     }
 }
 
-$tasks = getTasks();
-include components('templates/header');
+$userProjects = getProjectsForUser($userId);
 
-if ($flashAlert && isset($flashAlert['title'], $flashAlert['icon'])) {
-    $alertTitle = json_encode((string) $flashAlert['title']);
-    $alertIcon = json_encode((string) $flashAlert['icon']);
-    echo "<script>Swal.fire({title: $alertTitle, icon: $alertIcon});</script>";
+// Handle search
+$searchQuery = $_GET['search'] ?? '';
+if ($searchQuery) {
+    $userProjects = array_filter($userProjects, function ($project) use ($searchQuery) {
+        return stripos($project['name'], $searchQuery) !== false ||
+            stripos($project['description'], $searchQuery) !== false;
+    });
 }
 
-// Task Statuses & Initial Count
-$statuses = [
-    'open' => ['title' => 'Open', 'color' => 'bg-teal-500', 'bg' => 'bg-blue-100', 'icon' => 'sun.svg'],
-    'in_progress' => ['title' => 'In Progress', 'color' => 'bg-blue-500', 'bg' => 'bg-gray-100', 'icon' => 'sync.svg'],
-    'done' => ['title' => 'Done', 'color' => 'bg-purple-500', 'bg' => 'bg-blue-100', 'icon' => 'checked.svg']
-];
-
-// Count tasks per status
-$taskCount = array_fill_keys(array_keys($statuses), 0);
-foreach ($tasks as $task) {
-    $taskCount[$task['status']]++;
-}
-
+// Start content buffering
+ob_start();
 ?>
 
-<main class="mt-[6.4rem]">
-    <!-- Filter -->
-<div class="max-sm:flex max-sm:w-full max-sm:justify-center max-sm:overflow-x-auto max-sm:gap-3 max-sm:pb-1 max-sm:[-ms-overflow-style:none] max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 md:gap-0">
-        <?php foreach ($statuses as $key => $status): ?>
-            <div class="flex items-center space-x-2 text-white md:px-6 md:py-4 max-sm:rounded-full pr-[12.5px] p-2 max-sm:w-max max-sm:shrink-0 <?= $status['color'] ?>" id="filterTodoTrigger" data-type="<?= $key ?>">
-                <img src="<?= assets('images/icons/' . $status['icon']) ?>" alt="icon" class="w-5 h-5 md:w-6 md:h-6" />
-                <h3 class="text-sm font-semibold md:text-lg"><?= $status['title'] ?> <span class="max-sm:hidden">(<?= $taskCount[$key] ?>)</span></h3>
-            </div>
-        <?php endforeach; ?>
+<div class="p-6">
+    <!-- Header -->
+    <div class="mb-6">
+        <h1 class="text-xl font-semibold text-gray-900 mb-1">Dashboard</h1>
+        <p class="text-sm text-gray-600">Kelola dan pantau semua project Anda</p>
     </div>
 
-    <!-- Task List -->
-    <div class="grid grid-cols-3">
-        <?php foreach ($statuses as $key => $status): ?>
-            <div class="flex flex-col h-full min-h-[calc(100vh-11rem)] space-y-4 p-4 max-sm:col-span-3 md:<?= $status['bg'] ?>" id="todoListWrapper" data-type="<?= $key ?>">
-                <?php if ($taskCount[$key] === 0): ?>
-                    <!-- Empty State -->
-                    <div class="flex flex-col items-center justify-center h-full text-center text-gray-400">
-                        <img src="<?= assets('images/icons/edit.svg') ?>" alt="edit" class="w-20 h-20 mb-4" />
-                        <h4 class="font-semibold">Belum ada tugas</h4>
-                        <p class="max-sm:max-w-72">Segera tambahkan tugas baru kamu sekarang!</p>
-                    </div>
-                <?php else: ?>
-                    <!-- Task Cards -->
-                    <?php foreach ($tasks as $task): ?>
-                        <?php if ($task['status'] === $key): ?>
-                            <?php
-                            $safeTitle = trim((string) ($task['title'] ?? ''));
-                            $safeDescription = trim((string) ($task['description'] ?? ''));
-                            $safeAttachment = trim((string) ($task['attachment'] ?? ''));
-                            $safeDeadline = trim((string) ($task['deadline'] ?? ''));
-                            $formattedDeadline = $safeDeadline !== '' && strtotime($safeDeadline) !== false
-                                ? date("d M Y", strtotime($safeDeadline))
-                                : '-';
-                            ?>
-                            <div class="flex flex-col w-full p-4 space-y-2 bg-white rounded-lg shadow-md">
-                                <div class="flex flex-col space-y-2">
-                                    <h4 class="font-semibold"><?= $safeTitle !== '' ? htmlspecialchars($safeTitle) : '-' ?></h4>
-                                    <p class="text-gray-600 line-clamp-2"><?= $safeDescription !== '' ? htmlspecialchars($safeDescription) : '-' ?></p>
-                                    <div class="flex items-center space-x-2">
-                                        <img src="<?= assets('images/icons/files.svg') ?>" alt="files" class="w-5 h-5" />
-                                        <?php if ($safeAttachment !== ''): ?>
-                                            <a href="<?= htmlspecialchars(assets("public/" . $safeAttachment)) ?>" target="_blank" class="text-blue-500 truncate hover:underline max-w-96">
-                                                <?= htmlspecialchars(basename($safeAttachment)) ?>
-                                            </a>
-                                        <?php else: ?>
-                                            <p class="text-gray-600">-</p>
-                                        <?php endif; ?>
+    <!-- Search and Create -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex-1 max-w-sm">
+            <form method="GET" class="relative">
+                <input
+                    type="text"
+                    name="search"
+                    value="<?= htmlspecialchars($searchQuery) ?>"
+                    placeholder="Cari project..."
+                    class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+            </form>
+        </div>
+
+        <a href="<?= url('projects/create') ?>" class="ml-4 bg-brand-blue text-white px-4 py-2 text-sm rounded-md hover:opacity-90 transition-opacity flex items-center">
+            <i class="fas fa-plus mr-2 text-xs"></i>
+            Buat Project
+        </a>
+    </div>
+
+    <!-- Project Cards -->
+    <?php if (empty($userProjects)): ?>
+        <div class="text-center py-12">
+            <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i class="fas fa-folder-open text-lg text-gray-400"></i>
+            </div>
+            <h3 class="text-base font-medium text-gray-900 mb-2">
+                <?= $searchQuery ? 'Project tidak ditemukan' : 'Belum ada project' ?>
+            </h3>
+            <p class="text-sm text-gray-500 mb-4 max-w-xs mx-auto">
+                <?= $searchQuery ? 'Coba kata kunci yang berbeda' : 'Buat project pertama Anda untuk mulai berkolaborasi' ?>
+            </p>
+            <?php if (!$searchQuery): ?>
+                <a href="<?= url('projects/create') ?>" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-plus mr-2 text-xs"></i>
+                    Buat Project
+                </a>
+            <?php endif; ?>
+        </div>
+    <?php else: ?>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <?php foreach ($userProjects as $project): ?>
+                <?php
+                $taskCount = getTaskCountByProject($project['id']);
+                $memberCount = getProjectMemberCount($project['id']);
+                ?>
+                <div class="group bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 overflow-hidden">
+                    <!-- Card Header -->
+                    <div class="p-3">
+                        <div class="flex items-start justify-between mb-4">
+                            <!-- Status Badge -->
+                            <div class="flex items-center gap-3">
+                                <?php if ($project['status'] === 'active'): ?>
+                                    <div class="flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                        <div class="w-1 h-1 bg-green-500 rounded-full mr-1"></div>
+                                        Aktif
                                     </div>
-                                    <div class="flex items-center space-x-2">
-                                        <img src="<?= assets('images/icons/clock.svg') ?>" alt="clock" class="w-5 h-5" />
-                                        <p>Tenggat Waktu: <?= $formattedDeadline ?></p>
+                                <?php elseif ($project['status'] === 'draft'): ?>
+                                    <div class="flex items-center px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
+                                        <div class="w-1 h-1 bg-orange-500 rounded-full mr-1"></div>
+                                        Draft
                                     </div>
+                                <?php else: ?>
+                                    <div class="flex items-center px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                                        <div class="w-1 h-1 bg-gray-400 rounded-full mr-1"></div>
+                                        Diarsipkan
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Stats Row -->
+                                <div class="flex items-center">
+                                    <div class="w-3 h-3 rounded bg-blue-100 flex items-center justify-center mr-1 p-2.5">
+                                        <i class="fas fa-tasks text-xs text-blue-600"></i>
+                                    </div>
+                                    <span class="font-medium text-xs text-gray-700"><?= $taskCount ?></span>
                                 </div>
-                                <div class="flex space-x-2">
-                                    <button
-                                        id="deleteTodoTrigger"
-                                        class=" text-[#E53E3E] font-semibold hover:text-red-700"
-                                        data-id="<?= htmlspecialchars($task['id']); ?>"
-                                        data-title="<?= htmlspecialchars($task['title']); ?>"
-                                        data-description="<?= htmlspecialchars($task['description']); ?>"
-                                        data-attachment="<?= htmlspecialchars($task['attachment']); ?>"
-                                        data-deadline="<?= htmlspecialchars($task['deadline']); ?>"
-                                        data-status="<?= htmlspecialchars($task['status']); ?>">
-                                        Hapus
-                                    </button>
-                                    <div class="w-px h-full bg-[#CBD5E0]"></div>
-                                    <button
-                                        id="editTodoTrigger"
-                                        class=" text-[#3182CE] font-semibold hover:text-blue-700"
-                                        data-id="<?= htmlspecialchars($task['id']); ?>"
-                                        data-title="<?= htmlspecialchars($task['title']); ?>"
-                                        data-description="<?= htmlspecialchars($task['description']); ?>"
-                                        data-attachment="<?= htmlspecialchars($task['attachment']); ?>"
-                                        data-deadline="<?= htmlspecialchars($task['deadline']); ?>"
-                                        data-status="<?= htmlspecialchars($task['status']); ?>">
+
+                                <div class="flex items-center">
+                                    <div class="w-3 h-3 rounded bg-purple-100 flex items-center justify-center mr-1 p-2.5">
+                                        <i class="fas fa-users text-xs text-purple-600"></i>
+                                    </div>
+                                    <span class="font-medium text-xs text-gray-700"><?= $memberCount ?></span>
+                                </div>
+                            </div>
+
+                            <!-- Settings -->
+                            <div class="relative opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onclick="toggleProjectSettings(<?= $project['id'] ?>)" class="size-5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-ellipsis-h text-xs"></i>
+                                </button>
+
+                                <div id="projectSettings<?= $project['id'] ?>" class="hidden absolute right-0 top-full mt-1 z-10 bg-white rounded-md shadow-lg border border-gray-200 py-1 min-w-[160px]">
+                                    <a href="/projects/<?= $project['id'] ?>/edit" class="flex items-center px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+                                        <i class="fas fa-edit w-3 mr-2 text-gray-400"></i>
                                         Edit
+                                    </a>
+                                    <?php if ($project['status'] === 'active'): ?>
+                                        <button onclick="changeProjectStatus(<?= $project['id'] ?>, 'draft')" class="w-full flex items-center px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+                                            <i class="fas fa-file-alt w-3 mr-2 text-gray-400"></i>
+                                            Jadikan Draft
+                                        </button>
+                                    <?php else: ?>
+                                        <button onclick="changeProjectStatus(<?= $project['id'] ?>, 'active')" class="w-full flex items-center px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
+                                            <i class="fas fa-play w-3 mr-2 text-gray-400"></i>
+                                            Aktifkan
+                                        </button>
+                                    <?php endif; ?>
+                                    <hr class="my-1">
+                                    <button onclick="deleteProject(<?= $project['id'] ?>)" class="w-full flex items-center px-3 py-1.5 text-xs text-red-600 hover:bg-red-50">
+                                        <i class="fas fa-trash w-3 mr-2 text-red-400"></i>
+                                        Hapus
                                     </button>
                                 </div>
                             </div>
-                        <?php endif; ?>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        <?php endforeach; ?>
-    </div>
-
-    <!-- Add Todo Modal -->
-    <div id="addTodoModal" class="fixed inset-0 z-50 items-center justify-center hidden bg-gray-900 bg-opacity-50">
-        <div class="w-full md:max-w-[650px] p-6 bg-white rounded-2xl shadow-lg flex flex-col space-y-6 max-sm:mx-4">
-            <h2 class="mb-2 text-xl font-bold">Tugas Baru</h2>
-            <form class="flex flex-col space-y-4" action="<?= url('dashboard') ?>" method="POST" enctype="multipart/form-data">
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Nama Tugas</label>
-                    <input type="text" class="md:w-3/4 h-10 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Judul Tugas" name="title" />
-                </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Deskripsi</label>
-                    <textarea class="md:w-3/4 min-h-20 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Deskripsi Tugas" name="description"></textarea>
-                </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Tenggat Waktu</label>
-                    <div class="relative md:w-3/4">
-                        <input id="datepicker-format" datepicker datepicker-format="yyyy-mm-dd" type="text" class="w-full h-10 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer" placeholder="Pilih Tanggal" name="deadline" autocomplete="off">
-                        <div class="absolute inset-y-0 flex items-center pointer-events-none end-4 ps-3">
-                            <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M20 4a2 2 0 0 0-2-2h-2V1a1 1 0 0 0-2 0v1h-3V1a1 1 0 0 0-2 0v1H6V1a1 1 0 0 0-2 0v1H2a2 2 0 0 0-2 2v2h20V4ZM0 18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8H0v10Zm5-8h10a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Z" />
-                            </svg>
                         </div>
+
+                        <!-- Project Title -->
+                        <h3 class="font-semibold text-gray-900 text-sm mb-1.5 leading-tight">
+                            <a href="/projects/<?= $project['id'] ?>" class="hover:text-blue-600 transition-colors">
+                                <?= htmlspecialchars($project['name']) ?>
+                            </a>
+                        </h3>
+
+                        <!-- Description -->
+                        <p class="text-gray-600 text-xs leading-relaxed mb-2 line-clamp-2" style="min-height: 2rem;">
+                            <?= $project['description'] ? htmlspecialchars($project['description']) : '<span class="text-gray-400 italic">Tidak ada deskripsi</span>' ?>
+                        </p>
+
+                    </div>
+
+                    <!-- Card Footer - CTA -->
+                    <div class="px-3 py-2 bg-gray-50 border-t border-gray-100">
+                        <a href="<?= url('projects/'.$project['id']) ?>"
+                            class="flex items-center justify-center w-full py-1.5 px-3 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors">
+                            <i class="fas fa-arrow-right mr-1 text-xs"></i>
+                            Buka Project
+                        </a>
                     </div>
                 </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Lampiran/File</label>
-                    <input type="file" class="border border-gray-300 rounded-md md:w-3/4 focus:outline-none focus:ring-2 focus:ring-emerald-500" name="attachment" />
-                </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="md:w-1/4">Status</label>
-                    <select class="md:w-3/4 h-10 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" name="status">
-                        <option value="open">Open</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="done">Done</option>
-                    </select>
-                </div>
-
-                <div class="grid grid-cols-2 gap-4">
-                    <button class="px-4 py-2 mt-4 text-white rounded-md bg-emerald-500 hover:bg-emerald-700" type="submit">Simpan</button>
-                    <button id="closeAddTodoModal" class="px-4 py-2 mt-4 text-black bg-white border border-gray-400 rounded-md hover:bg-gray-100" type="button">Batal</button>
-                </div>
-            </form>
+            <?php endforeach; ?>
         </div>
-    </div>
+    <?php endif; ?>
+</div>
 
-    <!-- Edit Todo Modal -->
-    <div id="editTodoModal" class="fixed inset-0 z-50 items-center justify-center hidden bg-gray-900 bg-opacity-50">
-        <div class="w-full md:max-w-[650px] p-6 bg-white rounded-2xl shadow-lg flex flex-col space-y-6 max-sm:mx-4">
-            <h2 class="mb-2 text-xl font-bold">Edit Tugas</h2>
-            <form class="flex flex-col space-y-4" action="<?= url('dashboard') ?>" method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="_method" value="PUT" />
-                <input type="hidden" name="id" id="editTodoId" />
-                <input type="hidden" name="replace_attachment" id="editReplaceAttachment" value="0" />
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Nama Tugas</label>
-                    <input type="text" class="md:w-3/4 h-10 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Judul Tugas" name="title" />
-                </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Deskripsi</label>
-                    <textarea class="md:w-3/4 min-h-20 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Deskripsi Tugas" name="description"></textarea>
-                </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Tenggat Waktu</label>
-                    <div class="relative md:w-3/4">
-                        <input id="datepicker-formate" datepicker datepicker-formate="yyyy-mm-dd" type="text" class="w-full h-10 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer" placeholder="Pilih Tanggal" name="deadline" autocomplete="off">
-                        <div class="absolute inset-y-0 flex items-center pointer-events-none end-4 ps-3">
-                            <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M20 4a2 2 0 0 0-2-2h-2V1a1 1 0 0 0-2 0v1h-3V1a1 1 0 0 0-2 0v1H6V1a1 1 0 0 0-2 0v1H2a2 2 0 0 0-2 2v2h20V4ZM0 18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8H0v10Zm5-8h10a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Z" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="text-sm font-semibold md:w-1/4">Lampiran/File</label>
-                    <input type="file" class="border border-gray-300 rounded-md md:w-3/4 focus:outline-none focus:ring-2 focus:ring-emerald-500" name="attachment" />
-                </div>
-                <div class="flex gap-2 max-sm:flex-col">
-                    <div class="md:w-1/4"></div>
-                    <p class="text-sm text-gray-500 md:w-3/4">
-                        File saat ini:
-                        <a id="editCurrentAttachment" href="#" target="_blank" class="text-blue-500 hover:underline">-</a>
-                    </p>
-                </div>
-                <div class="flex gap-2 md:items-center max-sm:flex-col">
-                    <label class="md:w-1/4">Status</label>
-                    <select class="md:w-3/4 h-10 px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" name="status">
-                        <option value="open">Open</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="done">Done</option>
-                    </select>
-                </div>
+<script>
+    function toggleProjectSettings(projectId) {
+        // Hide all other dropdowns
+        $('[id^="projectSettings"]').addClass('hidden');
 
-                <div class="grid grid-cols-2 gap-4">
-                    <button class="px-4 py-2 mt-4 text-white rounded-md bg-emerald-500 hover:bg-emerald-700" type="submit">Simpan</button>
-                    <button id="closeEditTodoModal" class="px-4 py-2 mt-4 text-black bg-white border border-gray-400 rounded-md hover:bg-gray-100" type="button">Batal</button>
-                </div>
-            </form>
-        </div>
-    </div>
+        // Toggle current dropdown
+        $(`#projectSettings${projectId}`).toggleClass('hidden');
+    }
 
-    <!-- Delete Todo Modal -->
-    <div id="deleteTodoModal" class="fixed inset-0 z-50 items-center justify-center hidden bg-gray-900 bg-opacity-50">
-        <div class="w-full md:max-w-[650px] p-6 bg-white rounded-2xl shadow-lg flex flex-col space-y-6 max-sm:mx-4">
-            <h2 class="mb-2 text-xl font-bold">Hapus Tugas</h2>
-            <p class="text-gray-600">Apakah Anda yakin ingin menghapus tugas ini?</p>
-            <div class="flex flex-col p-4 space-y-2 shadow rounded-xl">
-                <h4 class="font-semibold" id="modal-title"></h4>
-                <p class="text-gray-600 line-clamp-2" id="modal-description"></p>
-                <div class="flex items-center gap-2">
-                    <img src="<?= assets('images/icons/files.svg') ?>" alt="files" class="w-5 h-5" />
-                    <a id="modal-attachment" href="#" target="_blank" class="text-blue-500 truncate hover:underline max-w-96"></a>
-                </div>
-                <div class="flex items-center gap-2">
-                    <img src="<?= assets('images/icons/clock.svg') ?>" alt="clock" class="w-5 h-5" />
-                    <p id="modal-deadline"></p>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                <button class="px-4 py-2 mt-4 text-white bg-red-500 rounded-md hover:bg-red-700" id="confirmDeleteTodoTrigger">Ya, Hapus</button>
-                <button id="closeDeleteTodoModal" class="px-4 py-2 mt-4 text-black bg-white border border-gray-400 rounded-md hover:bg-gray-100" type="button">Batal</button>
-            </div>
-        </div>
-    </div>
-</main>
+    function changeProjectStatus(projectId, status) {
+        Swal.fire({
+            title: 'Konfirmasi',
+            text: `Ubah status project menjadi ${status}?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Ya, ubah!',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading
+                Swal.fire({
+                    title: 'Mengubah status...',
+                    text: 'Mohon tunggu',
+                    icon: 'info',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        Swal.showLoading()
+                    }
+                });
+                
+                // API call to change project status
+                $.post('', {
+                    action: 'change_status',
+                    project_id: projectId,
+                    status: status,
+                    csrf_token: '<?= $_SESSION['csrf_token'] ?>'
+                })
+                .done(function(response) {
+                    try {
+                        const result = JSON.parse(response);
+                        if (result.success) {
+                            // Success: show result then reload
+                            Swal.fire({
+                                title: 'Berhasil!', 
+                                text: result.message, 
+                                icon: 'success',
+                                timer: 1500,
+                                showConfirmButton: false
+                            }).then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            // Failed: show error, no reload
+                            Swal.fire('Error!', result.message, 'error');
+                        }
+                    } catch(e) {
+                        Swal.fire('Error!', 'Respon server tidak valid', 'error');
+                    }
+                })
+                .fail(function(xhr, status, error) {
+                    Swal.fire('Error!', 'Gagal menghubungi server: ' + error, 'error');
+                });
+            }
+        });
+    }
 
-<?php include components('templates/footer'); ?>
+    function deleteProject(projectId) {
+        Swal.fire({
+            title: 'Hapus Project?',
+            text: 'Project dan semua tugas di dalamnya akan dihapus permanen!',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Ya, hapus!',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading
+                Swal.fire({
+                    title: 'Menghapus project...',
+                    text: 'Mohon tunggu',
+                    icon: 'info',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        Swal.showLoading()
+                    }
+                });
+                
+                // API call to delete project
+                $.post('', {
+                    action: 'delete_project',
+                    project_id: projectId,
+                    csrf_token: '<?= $_SESSION['csrf_token'] ?>'
+                })
+                .done(function(response) {
+                    try {
+                        const result = JSON.parse(response);
+                        if (result.success) {
+                            // Success: show result then reload
+                            Swal.fire({
+                                title: 'Terhapus!', 
+                                text: result.message, 
+                                icon: 'success',
+                                timer: 1500,
+                                showConfirmButton: false
+                            }).then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            // Failed: show error, no reload
+                            Swal.fire('Error!', result.message, 'error');
+                        }
+                    } catch(e) {
+                        Swal.fire('Error!', 'Respon server tidak valid', 'error');
+                    }
+                })
+                .fail(function(xhr, status, error) {
+                    Swal.fire('Error!', 'Gagal menghubungi server: ' + error, 'error');
+                });
+            }
+        });
+    }
+
+    // Hide dropdowns when clicking outside
+    $(document).click(function(e) {
+        if (!$(e.target).closest('.relative').length) {
+            $('[id^="projectSettings"]').addClass('hidden');
+        }
+    });
+</script>
+
+<?php
+$content = ob_get_clean();
+
+// Render with sidebar layout
+renderSidebarLayout('dashboard', $content, 'Dashboard - TaskHub');
+?>

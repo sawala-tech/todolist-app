@@ -1,11 +1,22 @@
 <?php
 session_start();
 
+// Timezone
+date_default_timezone_set('Asia/Jakarta');
+
+// Include helpers
+$helpersDir = __DIR__ . '/';
+require_once $helpersDir . 'auth_helpers.php';
+require_once $helpersDir . 'project_helpers.php';
+require_once $helpersDir . 'project_invitation_helpers.php';
+require_once $helpersDir . 'task_helpers.php';
+require_once $helpersDir . 'libs.php';
+
 //DB Connection
-$host = "localhost";
+$host     = "localhost";
 $username = "root";
 $password = "root";
-$dbname = "todo_list";
+$dbname   = "taskhub";
 
 $conn = new mysqli($host, $username, $password, $dbname);
 
@@ -65,25 +76,6 @@ function checkLogin($path)
 {
     if (!isset($_SESSION['user'])) {
         header('Location: ' . url($path));
-        exit;
-    }
-}
-
-function isAdmin()
-{
-    if (!isset($_SESSION['user'])) {
-        return false;
-    }
-
-    return (($_SESSION['user']['role_name'] ?? '') === 'admin') || ((int) ($_SESSION['user']['role_id'] ?? 0) === 1);
-}
-
-function checkAdmin($fallbackPath = 'dashboard')
-{
-    checkLogin('auth/signin');
-
-    if (!isAdmin()) {
-        header('Location: ' . url($fallbackPath));
         exit;
     }
 }

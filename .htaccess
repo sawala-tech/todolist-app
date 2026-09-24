@@ -1,27 +1,46 @@
 <IfModule mod_rewrite.c>
 RewriteEngine On
+RewriteBase /todolist-app/
 
-# If file/folder exists, serve it directly
-RewriteCond %{REQUEST_FILENAME} -f [OR]
-RewriteCond %{REQUEST_FILENAME} -d
+# Serve existing FILES directly
+RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
-# Redirect app root to signin
+# Redirect root to signin
 RewriteRule ^$ auth/signin [R=302,L]
 
-# App routes
-RewriteRule ^dashboard/?$ pages/dashboard/index.php [L,QSA]
-RewriteRule ^admin/?$ pages/admin/index.php [L,QSA]
-RewriteRule ^auth/signin/?$ pages/auth/signin/index.php [L,QSA]
-RewriteRule ^auth/signup/?$ pages/auth/signup/index.php [L,QSA]
-RewriteRule ^auth/signout/?$ pages/auth/signout/index.php [L,QSA]
+# ── Auth ─────────────────────────────────────────────────────────
+RewriteRule ^auth/signin/?$    pages/auth/signin/index.php    [L,QSA]
+RewriteRule ^auth/signup/?$    pages/auth/signup/index.php    [L,QSA]
+RewriteRule ^auth/signout/?$   pages/auth/signout/index.php   [L,QSA]
+
+# ── Profile ──────────────────────────────────────────────────────
+RewriteRule ^profile/?$        pages/profile/index.php        [L,QSA]
+
+# ── Dashboard ────────────────────────────────────────────────────
+RewriteRule ^dashboard/?$      pages/dashboard/index.php      [L,QSA]
+
+# ── Backlog & Activity ──────────────────────────────────────────
+RewriteRule ^backlog/task/create/?$       pages/backlog/task/create.php              [L,QSA]
+RewriteRule ^backlog/task/([0-9]+)/?$      pages/backlog/task/detail.php?id=$1       [L,QSA]
+RewriteRule ^backlog/?$        pages/backlog/index.php        [L,QSA]
+RewriteRule ^activity/?$       pages/activity/index.php       [L,QSA]
+
+# ── Projects ─────────────────────────────────────────────────────
+RewriteRule ^projects/create/?$                                   pages/projects/create/index.php                       [L,QSA]
+RewriteRule ^projects/([0-9]+)/?$                                 pages/projects/detail.php?id=$1                       [L,QSA]
+RewriteRule ^projects/([0-9]+)/edit/?$                           pages/projects/edit/index.php?id=$1                   [L,QSA]
+RewriteRule ^projects/([0-9]+)/settings/?$                        pages/projects/settings/index.php?id=$1               [L,QSA]
+RewriteRule ^projects/([0-9]+)/tasks/create/?$                    pages/projects/tasks/create/index.php?project_id=$1   [L,QSA]
+RewriteRule ^projects/([0-9]+)/tasks/([0-9]+)/?$                  pages/projects/tasks/detail.php?project_id=$1&task_id=$2  [L,QSA]
+
+# ── Project Invitation (join via link) ───────────────────────────
+RewriteRule ^invite/([a-zA-Z0-9]+)/?$   pages/invite/index.php?token=$1  [L,QSA]
+
+# ── API Routes ──────────────────────────────────────────────────
+RewriteRule ^api/project/([0-9]+)/invite/?$ pages/api/project/invite.php [L,QSA]
 </IfModule>
 
 <IfModule !mod_rewrite.c>
 DirectoryIndex pages/auth/signin/index.php
-RedirectMatch 307 ^/todolist/dashboard/?$ /todolist/pages/dashboard/index.php
-RedirectMatch 307 ^/todolist/admin/?$ /todolist/pages/admin/index.php
-RedirectMatch 307 ^/todolist/auth/signin/?$ /todolist/pages/auth/signin/index.php
-RedirectMatch 307 ^/todolist/auth/signup/?$ /todolist/pages/auth/signup/index.php
-RedirectMatch 307 ^/todolist/auth/signout/?$ /todolist/pages/auth/signout/index.php
 </IfModule>
